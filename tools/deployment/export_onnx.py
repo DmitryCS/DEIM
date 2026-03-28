@@ -51,8 +51,9 @@ def main(args, ):
 
     model = Model()
 
-    data = torch.rand(32, 3, 640, 640)
-    size = torch.tensor([[640, 640]])
+    # ram(64gb) overflow with model=X size=(1024,1024) batch=32 (used max_dynamic_batch_size=4 for onnx export)
+    data = torch.rand(args.max_dynamic_batch_size, 3, args.shape_height, args.shape_width)
+    size = torch.tensor([[args.shape_height, args.shape_width]])
     _ = model(data, size)
 
     dynamic_axes = {
@@ -69,7 +70,7 @@ def main(args, ):
         input_names=['images', 'orig_target_sizes'],
         output_names=['labels', 'boxes', 'scores'],
         dynamic_axes=dynamic_axes,
-        opset_version=16,
+        opset_version=17,   # error convert to trt 8.6 with opset_version=16
         verbose=False,
         do_constant_folding=True,
     )
@@ -99,5 +100,8 @@ if __name__ == '__main__':
     parser.add_argument('--resume', '-r', type=str, )
     parser.add_argument('--check',  action='store_true', default=True,)
     parser.add_argument('--simplify',  action='store_true', default=True,)
+    parser.add_argument('--shape_height',  type=int, default=640,)
+    parser.add_argument('--shape_width',  type=int, default=640,)
+    parser.add_argument('--max_dynamic_batch_size',  type=int, default=32,)
     args = parser.parse_args()
     main(args)
