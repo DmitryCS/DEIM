@@ -141,6 +141,19 @@ def evaluate(model: torch.nn.Module, criterion: torch.nn.Module, postprocessor, 
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
+        # --- Skipping a batch without annotations to bypass training freezes (timeout) ------------------------------
+        # https://github.com/Intellindust-AI-Lab/DEIM/issues/105#issuecomment-3154028350
+        local_flag = torch.tensor(
+            1 if sum(len(t['labels']) for t in targets) > 0 else 0,
+            device=device, dtype=torch.uint8,
+        )
+        if dist_utils.is_dist_available_and_initialized():
+            torch.distributed.all_reduce(local_flag, torch.distributed.ReduceOp.MIN)
+        if local_flag.item() == 0:
+            # Updating metrics with zeros
+            metric_logger.update(lr=0.0, loss=0.0, skip=1.0)
+            continue  # empty batch – moving on to the next one
+
         outputs = model(samples)
 
         orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
